@@ -1,4 +1,4 @@
-Fixed Income AI Risk Control System
+## Fixed Income AI Risk Control System
 
 An AI-assisted risk control platform for fixed income trading.
 
@@ -43,10 +43,7 @@ Terminal → New Terminal
 ```powershell
 cd "C:\Users\Sinopac\Desktop\風控\盤後風控報告"
 ```
-正常應顯示：
-```text
-C:\Users\Sinopac\Desktop\風控\盤後風控報告
-```
+
 ### 啟動固定收益風控Agent
 ```powershell
 py agent.py
