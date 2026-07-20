@@ -1,17 +1,26 @@
-# fixed_income_risk_control
+Fixed Income AI Risk Control System
+
+An AI-assisted risk control platform for fixed income trading.
+
+Features:
+• Daily P&L calculation
+• Net DV01 monitoring
+• Risk limit monitoring
+• Rule-based risk engine
+• RAG-based policy retrieval
+• Streamlit dashboard
+• Automated risk report generation
+
+---
 
 ## 第一次使用需要安裝的套件
 
 以下套件只需要安裝一次，不需要每天重新安裝。
-
 在VS Code終端機輸入：
-
 ```powershell
 pip install pandas openpyxl pypdf scikit-learn streamlit
 ```
-
 各套件用途：
-
 | 套件 | 用途 |
 | pandas | 讀取、處理及輸出Excel資料 |
 | openpyxl | 讓pandas讀寫`.xlsx`檔案 |
@@ -27,26 +36,21 @@ pip install pandas openpyxl pypdf scikit-learn streamlit
 ### 1. 開啟VS Code終端機
 
 在VS Code上方選單點選：
-
 ```text
 Terminal → New Terminal
 ```
-
-### 2. 切換到專案資料夾
+### 切換到專案資料夾
 ```powershell
 cd "C:\Users\Sinopac\Desktop\風控\盤後風控報告"
 ```
-
 正常應顯示：
 ```text
 C:\Users\Sinopac\Desktop\風控\盤後風控報告
 ```
-
-### 3. 啟動固定收益風控Agent
+### 啟動固定收益風控Agent
 ```powershell
 py agent.py
 ```
-
 每天正常使用時，只需要執行這個指令，不需要逐一執行其他Python檔案。
 
 ---
