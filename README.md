@@ -39,11 +39,11 @@ cd "C:\Users\Sinopac\Desktop\風控\盤後風控報告"
 ```
 ### 啟動固定收益風控Agent
 ```powershell
-py agent.py
+python agent.py
 ```
 ### 開啟streamlit
 ```powershell
-py -m streamlit run app.py
+python -m streamlit run app.py
 ```
 
 每天正常使用時，只需要執行這個指令，不需要逐一執行其他Python檔案。
