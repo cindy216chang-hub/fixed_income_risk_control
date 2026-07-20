@@ -33,9 +33,7 @@ pip install pandas openpyxl pypdf scikit-learn streamlit
 
 ## 每天開啟VS Code後的操作
 
-### 1. 開啟VS Code終端機
-
-在VS Code上方選單點選：
+### 開啟VS Code終端機
 ```text
 Terminal → New Terminal
 ```
@@ -43,14 +41,13 @@ Terminal → New Terminal
 ```powershell
 cd "C:\Users\Sinopac\Desktop\風控\盤後風控報告"
 ```
-
 ### 啟動固定收益風控Agent
 ```powershell
 py agent.py
 ```
-每天正常使用時，只需要執行這個指令，不需要逐一執行其他Python檔案。
-
----
-
-開啟streamlit
+### 開啟streamlit
+```powershell
 py -m streamlit run app.py
+```
+
+每天正常使用時，只需要執行這個指令，不需要逐一執行其他Python檔案。
