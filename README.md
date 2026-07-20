@@ -11,8 +11,6 @@ Features:
 • Streamlit dashboard
 • Automated risk report generation
 
----
-
 ## 第一次使用需要安裝的套件
 
 以下套件只需要安裝一次，不需要每天重新安裝。
@@ -28,8 +26,6 @@ pip install pandas openpyxl pypdf scikit-learn streamlit
 | scikit-learn | 使用TF-IDF及餘弦相似度搜尋規章 |
 
 目前系統使用免費的TF-IDF搜尋，不使用OpenAI API，也不需要PyTorch。
-
----
 
 ## 每天開啟VS Code後的操作
 
@@ -51,3 +47,5 @@ py -m streamlit run app.py
 ```
 
 每天正常使用時，只需要執行這個指令，不需要逐一執行其他Python檔案。
+
+---
