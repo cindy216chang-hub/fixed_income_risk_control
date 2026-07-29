@@ -13,7 +13,11 @@ BASE_DIR = Path(__file__).resolve().parent
 EXCEL_PATH = BASE_DIR / "data" / "債券交易員虛擬資料.xlsx"
 
 # 報告歸檔位置
-ARCHIVE_FOLDER = Path.home() / "風控"
+PROJECT_FOLDER=BASE_DIR.parent
+ARCHIVE_FOLDER = PROJECT_FOLDER / "盤後風控報告"
+
+# 建立歸檔資料夾
+ARCHIVE_FOLDER.mkdir(parents=True, exist_ok=True)
 
 
 # ============================================================
@@ -447,8 +451,7 @@ def generate_report(trader_id, query_date, save_archive=False):
         print("\n【審核狀態】")
         print(metrics["review_status"])
 
-        # 建立歸檔資料夾
-        ARCHIVE_FOLDER.mkdir(parents=True, exist_ok=True)
+        
 
         archive_location = ARCHIVE_FOLDER / f"{query_date:%Y-%m-%d}_{trader_id}_風控報告.xlsx" 
 
