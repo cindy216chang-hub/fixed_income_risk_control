@@ -331,6 +331,7 @@ if result is not None:
             archive_location = report.generate_report(
                 trader_id=result["trader_id"],
                 query_date=result["query_date"],
+                save_archive=True
             )
 
             st.success(
