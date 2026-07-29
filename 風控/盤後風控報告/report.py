@@ -13,7 +13,7 @@ BASE_DIR = Path(__file__).resolve().parent
 EXCEL_PATH = BASE_DIR / "data" / "債券交易員虛擬資料.xlsx"
 
 # 報告歸檔位置
-ARCHIVE_FOLDER = Path.home() / "Desktop" / "固定收益盤後風控報告"
+ARCHIVE_FOLDER = Path.home() / "風控"
 
 
 # ============================================================
@@ -248,7 +248,7 @@ def get_risk_status(trader_id, query_date):
 # 8. Agent 功能：產生完整報告
 # ============================================================
 
-def generate_report(trader_id, query_date):
+def generate_report(trader_id, query_date, save_archive=False):
     trader_id, query_date, trader_info, report_data = _get_query_data(trader_id, query_date)
     metrics = _calculate_metrics(trader_info, report_data)
 
@@ -447,10 +447,10 @@ def generate_report(trader_id, query_date):
         print("\n【審核狀態】")
         print(metrics["review_status"])
 
-    # 建立歸檔資料夾
-    ARCHIVE_FOLDER.mkdir(parents=True, exist_ok=True)
+        # 建立歸檔資料夾
+        ARCHIVE_FOLDER.mkdir(parents=True, exist_ok=True)
 
-    archive_location = ARCHIVE_FOLDER / f"{query_date:%Y-%m-%d}_{trader_id}_風控報告.xlsx"
+        archive_location = ARCHIVE_FOLDER / f"{query_date:%Y-%m-%d}_{trader_id}_風控報告.xlsx" 
 
     # ========================================================
     # 建立風控摘要
@@ -535,36 +535,42 @@ def generate_report(trader_id, query_date):
                     metrics["review_status"],],
             ],columns=["項目", "內容"],)
 
-    # 寫入 Excel
-        # ========================================================
+   
+    # ========================================================
     # 寫入Excel
     # ========================================================
 
-    with pd.ExcelWriter(archive_location) as writer:
+    archive_location = None
 
-        # 一般風控摘要
-        summary.to_excel(
-            writer,
-            sheet_name="風控摘要",
-            index=False,
+    if save_archive:
+        ARCHIVE_FOLDER.mkdir(parents=True, exist_ok=True)
+
+        archive_location = (
+            ARCHIVE_FOLDER
+            / f"{query_date:%Y-%m-%d}_{trader_id}_風控報告.xlsx"
         )
 
-        # 商品明細
-        pnl_overview.to_excel(
-            writer,
-            sheet_name="商品明細",
-            index=False,
-        )
-
-        # 只有不合規時才新增超限警告通知
-        if breach_notice_df is not None:
-            breach_notice_df.to_excel(
+        with pd.ExcelWriter(archive_location) as writer:
+            summary.to_excel(
                 writer,
-                sheet_name="超限警告通知",
+                sheet_name="風控摘要",
                 index=False,
             )
 
-    print("\n【歸檔位置】")
-    print(archive_location)
+            pnl_overview.to_excel(
+                writer,
+                sheet_name="商品明細",
+                index=False,
+            )
+
+            if breach_notice_df is not None:
+                breach_notice_df.to_excel(
+                    writer,
+                    sheet_name="超限警告通知",
+                    index=False,
+                )
+
+        print("\n【歸檔位置】")
+        print(archive_location)
 
     return archive_location
