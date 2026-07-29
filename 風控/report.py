@@ -3,13 +3,6 @@ import pandas as pd
 import os
 from rag.rule_mapping import get_breach_rule
 
-from reportlab.platypus import (
-    SimpleDocTemplate,
-    Paragraph,
-    Spacer)
-
-from reportlab.lib.styles import getSampleStyleSheet
-
 # ============================================================
 # 1. 路徑設定
 # ============================================================
@@ -21,7 +14,7 @@ BASE_DIR = Path(__file__).resolve().parent
 EXCEL_PATH = BASE_DIR / "data" / "債券交易員虛擬資料.xlsx"
 
 # 報告歸檔位置
-PROJECT_FOLDER=BASE_DIR.parent
+PROJECT_FOLDER=BASE_DIR.parent.parent
 ARCHIVE_FOLDER = PROJECT_FOLDER / "盤後風控報告"
 
 # 建立歸檔資料夾
@@ -589,74 +582,200 @@ def generate_report(trader_id, query_date, save_archive=False):
 
 
 #產生pdf
-def generate_pdf_report(
-    trader_id,
-    query_date,
-    metrics,
-    save_archive=False
-):
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.units import cm
+from reportlab.lib import colors
+from reportlab.platypus import (
+    SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+)
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.cidfonts import UnicodeCIDFont
 
-    pdf_filename = f"{query_date}_{trader_id}_風控報告.pdf"
-    pdf_path = os.path.join(
-        ARCHIVE_FOLDER,
-        pdf_filename
-    )
+# 註冊中文字型（reportlab內建CID字型，不需另外提供字型檔）
+pdfmetrics.registerFont(UnicodeCIDFont("STSong-Light"))
 
-    doc = SimpleDocTemplate(pdf_path)
 
-    styles = getSampleStyleSheet()
+def generate_pdf_report(trader_id, query_date, save_archive=False):
+    trader_id, query_date, trader_info, report_data = _get_query_data(trader_id, query_date)
+    metrics = _calculate_metrics(trader_info, report_data)
 
-    story = []
+    # 商品明細（跟Excel版本共用同一份資料）
+    pnl_overview = report_data[
+        ["商品名稱", "當日損益", "本月累計損益", "年累計損益", "持倉DV01"]
+    ].copy()
 
-    story.append(
-        Paragraph("固定收益盤後風控報告", styles["Heading1"])
-    )
+    for column in ["當日損益", "本月累計損益", "年累計損益", "持倉DV01"]:
+        pnl_overview[column] = pnl_overview[column].map(lambda value: f"{value:,.0f}")
 
-    story.append(
-        Paragraph(f"交易員：{trader_id}", styles["BodyText"])
-    )
+    # ========================================================
+    # 判斷是否超限（跟Excel版本邏輯一致）
+    # ========================================================
+    breach_notice = None
 
-    story.append(
-        Paragraph(f"日期：{query_date}", styles["BodyText"])
-    )
+    if metrics["overall_breach"]:
+        active_breaches = []
 
-    story.append(Spacer(1,20))
+        if metrics["dv01_breach"]:
+            active_breaches.append({"name": "DV01超限", "usage": metrics["dv01_usage"]})
 
-    story.append(
-        Paragraph(
-            f"今日損益：{metrics['daily_pnl']:,}",
-            styles["BodyText"]
+        if metrics["monthly_stop_loss_breach"]:
+            active_breaches.append({"name": "月停損超限", "usage": metrics["monthly_stop_loss_usage"]})
+
+        if metrics["yearly_stop_loss_breach"]:
+            active_breaches.append({"name": "年停損超限", "usage": metrics["yearly_stop_loss_usage"]})
+
+        first_breach_type = (
+            "dv01_breach" if metrics["dv01_breach"]
+            else "monthly_stop_loss_breach" if metrics["monthly_stop_loss_breach"]
+            else "yearly_stop_loss_breach"
         )
-    )
+        rule = get_breach_rule(first_breach_type)
 
-    story.append(
-        Paragraph(
-            f"本月損益：{metrics['mtd_pnl']:,}",
-            styles["BodyText"]
+        breach_items_text = "\n".join(
+            f"{b['name']}：{b['usage']:.2%}" for b in active_breaches
         )
-    )
 
-    story.append(
-        Paragraph(
-            f"今年損益：{metrics['ytd_pnl']:,}",
-            styles["BodyText"]
+        if rule is not None:
+            breach_notice = {
+                "breach_items": breach_items_text,
+                "basis": rule["basis"],
+                "required_actions": rule["required_actions"],
+                "deadline": rule["deadline"],
+            }
+        else:
+            unset = {"source": "未設定", "section": "未設定", "text": "找不到相關資訊，請人工確認。"}
+            breach_notice = {
+                "breach_items": breach_items_text,
+                "basis": unset,
+                "required_actions": unset,
+                "deadline": unset,
+            }
+
+
+
+    # ========================================================
+    # 建立PDF內容
+    # ========================================================
+    archive_location = None
+
+    if save_archive:
+        ARCHIVE_FOLDER.mkdir(parents=True, exist_ok=True)
+        archive_location = (
+            ARCHIVE_FOLDER
+            / f"{query_date:%Y-%m-%d}_{trader_id}_風控報告.pdf"
         )
-    )
 
-    story.append(
-        Paragraph(
-            f"DV01：{metrics['net_dv01']:,}",
-            styles["BodyText"]
+        doc = SimpleDocTemplate(
+            str(archive_location),
+            pagesize=A4,
+            leftMargin=1.5 * cm,
+            rightMargin=1.5 * cm,
+            topMargin=1.5 * cm,
+            bottomMargin=1.5 * cm,
         )
-    )
 
-    story.append(
-        Paragraph(
-            f"風控狀態：{metrics['overall_status']}",
-            styles["BodyText"]
+        styles = getSampleStyleSheet()
+        title_style = ParagraphStyle(
+            "TitleCN", parent=styles["Title"], fontName="STSong-Light", fontSize=16
         )
-    )
+        heading_style = ParagraphStyle(
+            "HeadingCN", parent=styles["Heading2"], fontName="STSong-Light", fontSize=12,
+            spaceBefore=12, spaceAfter=6,
+        )
+        normal_style = ParagraphStyle(
+            "NormalCN", parent=styles["Normal"], fontName="STSong-Light", fontSize=10, leading=14
+        )
 
-    doc.build(story)
+        elements = []
 
-    return pdf_path
+        # 標題
+        elements.append(Paragraph("固定收益盤後風控監控報告", title_style))
+        elements.append(Spacer(1, 0.3 * cm))
+        elements.append(Paragraph(f"報告日期：{query_date.date()}", normal_style))
+        elements.append(Paragraph(f"交易員：{trader_info['交易員姓名']} ({trader_id})", normal_style))
+
+        # 損益概況
+        elements.append(Paragraph("【損益概況】", heading_style))
+        elements.append(Paragraph(f"當日損益：{metrics['total_daily_pnl']:,.0f} USD", normal_style))
+        elements.append(Paragraph(f"本月累計損益：{metrics['total_mtd_pnl']:,.0f} USD", normal_style))
+        elements.append(Paragraph(f"年累計損益：{metrics['total_ytd_pnl']:,.0f} USD", normal_style))
+
+        # 商品明細（表格）
+        elements.append(Paragraph("【商品明細】", heading_style))
+        table_data = [list(pnl_overview.columns)] + pnl_overview.values.tolist()
+        pnl_table = Table(table_data, hAlign="LEFT")
+        pnl_table.setStyle(TableStyle([
+            ("FONTNAME", (0, 0), (-1, -1), "STSong-Light"),
+            ("FONTSIZE", (0, 0), (-1, -1), 9),
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#DDDDDD")),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+            ("ALIGN", (1, 0), (-1, -1), "RIGHT"),
+        ]))
+        elements.append(pnl_table)
+
+        # 停損監控
+        elements.append(Paragraph("【停損監控】", heading_style))
+        elements.append(Paragraph(f"月停損上限：{metrics['monthly_stop_loss_limit']:,.0f} USD", normal_style))
+        elements.append(Paragraph(f"月停損使用率：{metrics['monthly_stop_loss_usage']:.2%}", normal_style))
+        elements.append(Paragraph(f"月停損狀態：{metrics['monthly_stop_status']}", normal_style))
+        elements.append(Paragraph(f"年停損上限：{metrics['yearly_stop_loss_limit']:,.0f} USD", normal_style))
+        elements.append(Paragraph(f"年停損使用率：{metrics['yearly_stop_loss_usage']:.2%}", normal_style))
+        elements.append(Paragraph(f"年停損狀態：{metrics['yearly_stop_status']}", normal_style))
+
+        # 壓力測試
+        elements.append(Paragraph("【壓力測試】", heading_style))
+        elements.append(Paragraph(f"總 DV01：{metrics['net_dv01']:,.0f} USD/bp", normal_style))
+        elements.append(Paragraph(f"利率上升 10bps，預估影響：{metrics['impact_up_10bp']:,.0f} USD", normal_style))
+        elements.append(Paragraph(f"利率上升 50bps，預估影響：{metrics['impact_up_50bp']:,.0f} USD", normal_style))
+
+        # 風控指標
+        elements.append(Paragraph("【風控指標】", heading_style))
+        elements.append(Paragraph(f"DV01 控管：{metrics['dv01_control_status']}", normal_style))
+        elements.append(Paragraph(f"DV01 授權額度：{metrics['dv01_limit']:,.0f} USD/bp", normal_style))
+        elements.append(Paragraph(f"實際控管 DV01：{metrics['actual_control_dv01']:,.0f} USD/bp", normal_style))
+        elements.append(Paragraph(f"DV01 使用率：{metrics['dv01_usage']:.2%}", normal_style))
+        elements.append(Paragraph(f"停損控管：{metrics['stop_loss_control_status']}", normal_style))
+
+        # 風控狀態 / 合規 / 審核
+        elements.append(Paragraph(f"【風控狀態】{metrics['overall_risk_status']}", heading_style))
+        elements.append(Paragraph("【合規處置】", heading_style))
+        elements.append(Paragraph(metrics["compliance_action"], normal_style))
+        elements.append(Paragraph("【審核狀態】", heading_style))
+        elements.append(Paragraph(metrics["review_status"], normal_style))
+
+        # 超限警告通知
+        if breach_notice is not None:
+            elements.append(Spacer(1, 0.5 * cm))
+            elements.append(Paragraph("⚠ 超限警告通知", heading_style))
+            elements.append(Paragraph("【超限項目】", normal_style))
+            elements.append(Paragraph(breach_notice["breach_items"].replace("\n", "<br/>"), normal_style))
+
+            elements.append(Paragraph("【制度依據】", normal_style))
+            elements.append(Paragraph(
+                f"來源：{breach_notice['basis']['source']}　條次：{breach_notice['basis']['section']}",
+                normal_style,
+            ))
+            elements.append(Paragraph(breach_notice["basis"]["text"], normal_style))
+
+            elements.append(Paragraph("【應辦事項】", normal_style))
+            elements.append(Paragraph(
+                f"來源：{breach_notice['required_actions']['source']}　"
+                f"條次：{breach_notice['required_actions']['section']}",
+                normal_style,
+            ))
+            elements.append(Paragraph(breach_notice["required_actions"]["text"], normal_style))
+
+            elements.append(Paragraph("【處理期限】", normal_style))
+            elements.append(Paragraph(
+                f"來源：{breach_notice['deadline']['source']}　條次：{breach_notice['deadline']['section']}",
+                normal_style,
+            ))
+            elements.append(Paragraph(breach_notice["deadline"]["text"], normal_style))
+
+        doc.build(elements)
+
+        print("\n【PDF歸檔位置】")
+        print(archive_location)
+
+    return archive_location

@@ -314,7 +314,7 @@ if result is not None:
             )
 
     # ========================================================
-    # Excel輸出及重新查詢按鈕
+    # Excel ＆ pdf輸出及重新查詢按鈕
     # ========================================================
 
     st.divider()
@@ -350,7 +350,7 @@ if result is not None:
     #輸出pdf
     if button_column_2.button(
     "輸出PDF報告",
-    type="secondary",
+    type="primary",
     use_container_width=True,
     ):
         try:
@@ -374,9 +374,9 @@ if result is not None:
 
 
     # 清除目前顯示的查詢結果
-        if button_column_3.button(
-            "清除查詢結果",
-            use_container_width=True,
-        ):
-            st.session_state.report_result = None
-            st.rerun()
+    if button_column_3.button(
+        "清除查詢結果",
+        use_container_width=True,
+    ):
+        st.session_state.report_result = None
+        st.rerun()

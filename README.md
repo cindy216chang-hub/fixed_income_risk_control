@@ -16,7 +16,7 @@ Features:
 以下套件只需要安裝一次，不需要每天重新安裝。
 在VS Code終端機輸入：
 ```powershell
-pip install pandas openpyxl pypdf scikit-learn streamlit PyMuPDF
+pip install pandas openpyxl pypdf scikit-learn streamlit PyMuPDF reportlab
 ```
 各套件用途：
 | 套件 | 用途 |
