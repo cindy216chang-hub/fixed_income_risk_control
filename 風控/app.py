@@ -1,5 +1,5 @@
 import streamlit as st
-import report
+import 風控.report as report
 from rag.rule_mapping import get_breach_rule #匯入超限規章對照表
 
 
