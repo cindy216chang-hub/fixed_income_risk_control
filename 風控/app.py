@@ -319,7 +319,7 @@ if result is not None:
 
     st.divider()
 
-    button_column_1, button_column_2 = st.columns(2)
+    button_column_1, button_column_2 ,button_column_3= st.columns(3)
 
     # 只有按這個按鈕，才會呼叫generate_report()
     if button_column_1.button(
@@ -344,10 +344,39 @@ if result is not None:
                 f"輸出Excel時發生錯誤：{error}"
             )
 
-    # 清除目前顯示的查詢結果
+  
+
+
+    #輸出pdf
     if button_column_2.button(
-        "清除查詢結果",
-        use_container_width=True,
+    "輸出PDF報告",
+    type="secondary",
+    use_container_width=True,
     ):
-        st.session_state.report_result = None
-        st.rerun()
+        try:
+            pdf_location = report.generate_pdf_report(
+                trader_id=result["trader_id"],
+                query_date=result["query_date"],
+                save_archive=True
+            )
+
+            st.success(
+                f"PDF報告已輸出："
+                f"{pdf_location}"
+            )
+
+        except Exception as error:
+            st.error(
+                f"輸出PDF時發生錯誤：{error}"
+            )
+
+
+
+
+    # 清除目前顯示的查詢結果
+        if button_column_3.button(
+            "清除查詢結果",
+            use_container_width=True,
+        ):
+            st.session_state.report_result = None
+            st.rerun()

@@ -1,6 +1,14 @@
 from pathlib import Path
 import pandas as pd
+import os
 from rag.rule_mapping import get_breach_rule
+
+from reportlab.platypus import (
+    SimpleDocTemplate,
+    Paragraph,
+    Spacer)
+
+from reportlab.lib.styles import getSampleStyleSheet
 
 # ============================================================
 # 1. 路徑設定
@@ -577,3 +585,78 @@ def generate_report(trader_id, query_date, save_archive=False):
         print(archive_location)
 
     return archive_location
+
+
+
+#產生pdf
+def generate_pdf_report(
+    trader_id,
+    query_date,
+    metrics,
+    save_archive=False
+):
+
+    pdf_filename = f"{query_date}_{trader_id}_風控報告.pdf"
+    pdf_path = os.path.join(
+        ARCHIVE_FOLDER,
+        pdf_filename
+    )
+
+    doc = SimpleDocTemplate(pdf_path)
+
+    styles = getSampleStyleSheet()
+
+    story = []
+
+    story.append(
+        Paragraph("固定收益盤後風控報告", styles["Heading1"])
+    )
+
+    story.append(
+        Paragraph(f"交易員：{trader_id}", styles["BodyText"])
+    )
+
+    story.append(
+        Paragraph(f"日期：{query_date}", styles["BodyText"])
+    )
+
+    story.append(Spacer(1,20))
+
+    story.append(
+        Paragraph(
+            f"今日損益：{metrics['daily_pnl']:,}",
+            styles["BodyText"]
+        )
+    )
+
+    story.append(
+        Paragraph(
+            f"本月損益：{metrics['mtd_pnl']:,}",
+            styles["BodyText"]
+        )
+    )
+
+    story.append(
+        Paragraph(
+            f"今年損益：{metrics['ytd_pnl']:,}",
+            styles["BodyText"]
+        )
+    )
+
+    story.append(
+        Paragraph(
+            f"DV01：{metrics['net_dv01']:,}",
+            styles["BodyText"]
+        )
+    )
+
+    story.append(
+        Paragraph(
+            f"風控狀態：{metrics['overall_status']}",
+            styles["BodyText"]
+        )
+    )
+
+    doc.build(story)
+
+    return pdf_path
