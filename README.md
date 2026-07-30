@@ -35,17 +35,17 @@ Terminal → New Terminal
 ```
 ### 切換到專案資料夾
 ```powershell
-cd "C:\Users\Sinopac\Desktop\風控\盤後風控報告"
+cd "C:\Users\Sinopac\Desktop\GitHub\fixed_income_risk_control\風控"
 ```
 ### 啟動固定收益風控Agent
 ```powershell
-python agent.py
+py/python agent.py
 ```
 ### 開啟streamlit
 ```powershell
-python -m streamlit run app.py
+py/python -m streamlit run app.py
 ```
 
-每天正常使用時，只需要執行這個指令，不需要逐一執行其他Python檔案。
+每天正常使用時，只需要執行這2個指令，不需要逐一執行其他Python檔案。
 
 ---
