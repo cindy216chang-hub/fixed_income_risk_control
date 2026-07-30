@@ -1,6 +1,34 @@
 from datetime import datetime
 import report
 
+def get_trader_id():
+    """
+    要求使用者輸入交易員代號。
+    只有交易員代號存在時，才會進入日期輸入。
+    """
+
+    while True:
+        trader_id = input(
+            "請輸入交易員代號，例如 TRD003："
+        ).strip()
+
+        if trader_id.lower() == "exit":
+            return None
+
+        try:
+            # 直接使用 report.py 的檢查函式
+            trader_id, trader_info = report.get_trader_info(trader_id)
+
+            if "交易員姓名" in trader_info.index:
+                print(f"交易員姓名：{trader_info['交易員姓名']}")
+
+            print()
+            return trader_id
+
+        except ValueError as error:
+            print(f"{error}")
+            print("請重新輸入。\n")
+
 def get_query_date():
     while True:
         date_text = input("請輸入查詢日期，例如 2026-07-08：").strip()
@@ -23,8 +51,7 @@ def run_agent():
         "get_total_pnl",
         "get_dv01",
         "get_risk_status",
-        "generate_report",
-    ]
+        "generate_report",]
 
     missing_functions = [
         function_name
@@ -40,7 +67,10 @@ def run_agent():
     print("Fixed Income Risk Agent")
     print("=" * 50)
 
-    trader_id = input("請輸入交易員代號，例如 TRD001：").strip().upper()
+    trader_id = get_trader_id()
+    if trader_id is None:
+         print("已離開風控查詢系統。")
+         return
     query_date = get_query_date()
 
     print()

@@ -51,20 +51,13 @@ def _load_data():
 # ============================================================
 # 3. 查詢指定交易員與日期的資料
 # ============================================================
+def get_trader_info(trader_id):
+    trader_master,_ =_load_data()
+    trader_id= str(trader_id).strip().upper()
 
-def _get_query_data(trader_id, query_date):
-    """取得指定交易員的主檔資料，以及指定日期的歷史資料。"""
-
-    trader_master, history = _load_data()
-
-    trader_id = str(trader_id).strip().upper()
-
-    try:
-        query_date = pd.to_datetime(query_date).normalize()
-    except (ValueError, TypeError):
-        raise ValueError("日期格式錯誤，請使用 YYYY-MM-DD，例如 2026-07-08。")
-
-    # 查詢交易員主檔
+    if not trader_id:
+        raise ValueError("交易員代號不可空白。")
+    
     trader_result = trader_master.loc[trader_master["交易員代號"] == trader_id]
 
     if trader_result.empty:
@@ -72,23 +65,47 @@ def _get_query_data(trader_id, query_date):
 
     trader_info = trader_result.iloc[0]
 
+    return trader_id, trader_info
+
+    
+def _get_query_data(trader_id, query_date):
+    
+    _ , history = _load_data()
+
+    trader_id, trader_info = get_trader_info(trader_id)
+
+    try:
+        query_date = pd.to_datetime(query_date).normalize()
+    except (ValueError, TypeError):
+        raise ValueError(
+            "日期格式錯誤，請使用 YYYY-MM-DD，例如 2026-07-08。")
+
     # 查詢指定日期的歷史資料
     report_data = history.loc[
-        (history["交易員代號"] == trader_id) & (history["交易日期"] == query_date)
-    ].copy()
+        (history["交易員代號"] == trader_id) & (history["交易日期"] == query_date)].copy()
 
     if report_data.empty:
-        raise ValueError(f"{trader_id} 在 {query_date.date()} 沒有歷史資料")
+        raise ValueError(
+            f"{trader_id} 在 {query_date.date()} 沒有歷史資料"
+        )
 
     # 將計算欄位轉成數字
-    numeric_columns = ["當日損益", "本月累計損益", "年累計損益", "持倉DV01"]
+    numeric_columns = [
+        "當日損益",
+        "本月累計損益",
+        "年累計損益",
+        "持倉DV01",]
 
     for column in numeric_columns:
-        report_data[column] = pd.to_numeric(report_data[column], errors="coerce")
+        report_data[column] = pd.to_numeric(
+            report_data[column],
+            errors="coerce",)
 
     # 有無法轉換的數值時直接警告
     if report_data[numeric_columns].isna().any().any():
-        raise ValueError("歷史資料中存在無法轉換成數字的損益或 DV01 資料。")
+        raise ValueError(
+            "歷史資料中存在無法轉換成數字的損益或 DV01 資料。"
+        )
 
     return trader_id, query_date, trader_info, report_data
 
@@ -98,7 +115,6 @@ def _get_query_data(trader_id, query_date):
 # ============================================================
 
 def _calculate_metrics(trader_info, report_data):
-    """計算損益、DV01、停損使用率及超限狀態。"""
 
     total_daily_pnl = report_data["當日損益"].sum()
     total_mtd_pnl = report_data["本月累計損益"].sum()
