@@ -1,7 +1,7 @@
 # 從 pdf_loader.py 匯入：
 # 1. PDF 資料夾的位置
 # 2. 讀取單一 PDF 的函式
-from pdf_loader import PDF_PATH, load_pdf_text
+from rag.pdf_loader import PDF_PATH, load_pdf_text
 
 
 # 定義文字切段函式

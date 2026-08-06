@@ -3,7 +3,7 @@
 from sklearn.metrics.pairwise import cosine_similarity
 
 # 從 embedding.py 匯入建立搜尋索引的函式
-from embedding import build_tfidf_index
+from rag.embedding import build_tfidf_index
 
 
 # 建立規章搜尋函式

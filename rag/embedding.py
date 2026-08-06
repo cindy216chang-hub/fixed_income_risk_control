@@ -3,8 +3,8 @@
 from pathlib import Path
 from sklearn.feature_extraction.text import TfidfVectorizer #匯入文字向量工具
 # 匯入原本寫好的 PDF 讀取與文字切段功能
-from pdf_loader import PDF_PATH, load_pdf_text
-from text_chunker import split_text
+from rag.pdf_loader import PDF_PATH, load_pdf_text
+from rag.text_chunker import split_text
 
 
 def load_all_chunks():
