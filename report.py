@@ -1,7 +1,6 @@
 from pathlib import Path
 import pandas as pd
-import os
-from rag.rule_mapping import get_breach_rule
+from xml.sax.saxutils import escape
 
 # ============================================================
 # 1. 路徑設定
@@ -269,7 +268,7 @@ def get_risk_status(trader_id, query_date):
 # 8. Agent 功能：產生完整報告
 # ============================================================
 
-def generate_report(trader_id, query_date, save_archive=False):
+def generate_report(trader_id, query_date, save_archive=False, breach_rule_result=None):
     trader_id, query_date, trader_info, report_data = _get_query_data(trader_id, query_date)
     metrics = _calculate_metrics(trader_info, report_data)
 
@@ -328,150 +327,6 @@ def generate_report(trader_id, query_date, save_archive=False):
     print("\n【審核狀態】")
     print(metrics["review_status"])
 
-# ============================================================
-# 產生超限警告通知
-# ============================================================
-
-# 預設沒有超限通知
-    breach_notice = None
-
-    # 只有overall_breach為True時才建立通知
-    if metrics["overall_breach"]:
-
-        # 儲存本次發生的所有超限項目
-        active_breaches = []
-
-        # 檢查DV01超限
-        if metrics["dv01_breach"]:
-            active_breaches.append(
-                {
-                    "type": "dv01_breach",
-                    "name": "DV01超限",
-                    "usage": metrics["dv01_usage"],
-                }
-            )
-
-        # 檢查月停損超限
-        if metrics["monthly_stop_loss_breach"]:
-            active_breaches.append(
-                {
-                    "type": "monthly_stop_loss_breach",
-                    "name": "月停損超限",
-                    "usage": metrics[
-                        "monthly_stop_loss_usage"
-                    ],
-                }
-            )
-
-        # 檢查年停損超限
-        if metrics["yearly_stop_loss_breach"]:
-            active_breaches.append(
-                {
-                    "type": "yearly_stop_loss_breach",
-                    "name": "年停損超限",
-                    "usage": metrics[
-                        "yearly_stop_loss_usage"
-                    ],
-                }
-            )
-
-        # 使用第一個超限項目取得共用規章
-        first_breach_type = active_breaches[0]["type"]
-
-        # 從rule_mapping.py取得規章
-        rule = get_breach_rule(first_breach_type)
-
-        # 整理超限項目文字
-        breach_items = []
-
-        for breach in active_breaches:
-            breach_items.append(
-                f"{breach['name']}："
-                f"{breach['usage']:.2%}"
-            )
-
-        # 將多個超限項目合併成多行文字
-        breach_items_text = "\n".join(
-            breach_items
-        )
-
-        # 如果成功找到規章
-        if rule is not None:
-            breach_notice = {
-                "breach_items": breach_items_text,
-                "basis": rule["basis"],
-                "required_actions": (
-                    rule["required_actions"]
-                ),
-                "deadline": rule["deadline"],
-            }
-
-        # 如果沒有找到規章設定
-        else:
-            breach_notice = {
-                "breach_items": breach_items_text,
-                "basis": {
-                    "source": "未設定",
-                    "section": "未設定",
-                    "text": "找不到制度依據，請人工確認。",
-                },
-                "required_actions": {
-                    "source": "未設定",
-                    "section": "未設定",
-                    "text": "找不到應辦事項，請人工確認。",
-                },
-                "deadline": {
-                    "source": "未設定",
-                    "section": "未設定",
-                    "text": "找不到處理期限，請人工確認。",
-                },
-            }
-# ========================================================
-# 終端機顯示超限警告通知
-# ========================================================
-
-    if breach_notice is not None:
-
-        print("\n" + "!" * 60)
-        print("超限警告通知")
-        print("!" * 60)
-
-        print("\n【超限項目】")
-        print(breach_notice["breach_items"])
-
-        print("\n【制度依據】")
-        print(
-            f"來源："
-            f"{breach_notice['basis']['source']}")
-        print(
-            f"條次："
-            f"{breach_notice['basis']['section']}")
-        print(breach_notice["basis"]["text"])
-        print("\n【應辦事項】")
-        print(
-            f"來源："
-            f"{breach_notice['required_actions']['source']}")
-        print(
-            f"條次："
-            f"{breach_notice['required_actions']['section']}")
-        print(
-            breach_notice["required_actions"]["text"])
-        print("\n【處理期限】")
-        print(
-            f"來源："
-            f"{breach_notice['deadline']['source']}")
-        print(
-            f"條次："
-            f"{breach_notice['deadline']['section']}")
-        print(breach_notice["deadline"]["text"])
-
-        print("\n【審核狀態】")
-        print(metrics["review_status"])
-
-        
-
-        archive_location = ARCHIVE_FOLDER / f"{query_date:%Y-%m-%d}_{trader_id}_風控報告.xlsx" 
-
     # ========================================================
     # 建立風控摘要
     # ========================================================
@@ -499,61 +354,113 @@ def generate_report(trader_id, query_date, save_archive=False):
     # 建立超限警告通知工作表
     # ========================================================
 
-    # 預設沒有超限警告通知工作表
     breach_notice_df = None
 
-    # 只有產生breach_notice時才建立
-    if breach_notice is not None:
+    # 發生超限時才建立超限警告通知工作表
+    if metrics["overall_breach"]:
+
+        # 整理超限項目
+        breach_items = []
+
+        if metrics["dv01_breach"]:
+            breach_items.append(
+                f"DV01超限（使用率："
+                f"{metrics['dv01_usage']:.2%}）"
+            )
+
+        if metrics["monthly_stop_loss_breach"]:
+            breach_items.append(
+                f"月停損超限（使用率："
+                f"{metrics['monthly_stop_loss_usage']:.2%}）"
+            )
+
+        if metrics["yearly_stop_loss_breach"]:
+            breach_items.append(
+                f"年停損超限（使用率："
+                f"{metrics['yearly_stop_loss_usage']:.2%}）"
+            )
+
+        breach_items_text = "、".join(breach_items)
+
+        # 預設內容：AI規章建議無法取得時使用
+        ai_rule_answer = (
+            "目前無法取得AI規章處理建議，"
+            "請人工確認相關規章。"
+        )
+
+        source_text = "未提供"
+
+        # 使用 app.py 傳入的 RAG + Gemini 結果
+        if breach_rule_result is not None:
+
+            ai_rule_answer = breach_rule_result.get(
+                "answer",
+                ai_rule_answer,
+            )
+
+            sources = breach_rule_result.get(
+                "sources",
+                [],
+            )
+
+            if sources:
+                source_lines = []
+
+                for number, source in enumerate(
+                    sources,
+                    start=1,
+                ):
+                    source_title = source.get(
+                        "title",
+                        "未命名規章",
+                    )
+
+                    source_score = source.get(
+                        "score",
+                        0,
+                    )
+
+                    source_path = source.get(
+                        "path",
+                        "未提供來源路徑",
+                    )
+
+                    source_lines.append(
+                        f"{number}. {source_title}｜"
+                        f"相似度：{source_score:.3f}｜"
+                        f"來源檔案：{source_path}"
+                    )
+
+                source_text = "\n".join(source_lines)
 
         breach_notice_df = pd.DataFrame(
             [
-                ["通知狀態",
-                "超限預警",],
-                ["報告日期",
-                    str(query_date.date()),],
-                ["交易員代號",
-                    trader_id,],
-                ["交易員姓名",
-                    trader_info["交易員姓名"],],
-                ["超限項目",
-                    breach_notice["breach_items"],],
-                ["整體風控狀態",
-                    metrics["overall_risk_status"],],
-
-                # 制度依據
-                ["制度依據來源",
-                    breach_notice["basis"]["source"],],
-                ["制度依據條次",
-                    breach_notice["basis"]["section"],],
-                ["制度依據原文",
-                    breach_notice["basis"]["text"],],
-
-                # 應辦事項
-                ["應辦事項來源",
-                    breach_notice[
-                        "required_actions"
-                    ]["source"],],
-                ["應辦事項條次",
-                    breach_notice[
-                        "required_actions"
-                    ]["section"],],
-                ["應辦事項原文",
-                    breach_notice[
-                        "required_actions"
-                    ]["text"],],
-
-                # 處理期限
-                ["處理期限來源",
-                    breach_notice["deadline"]["source"],],
-                ["處理期限條次",
-                    breach_notice["deadline"]["section"],],
-                ["處理期限原文",
-                    breach_notice["deadline"]["text"],],
-
-                # 審核狀態
-                ["審核狀態",
-                    metrics["review_status"],],
-            ],columns=["項目", "內容"],)
+                ["通知狀態", "超限預警"],
+                ["報告日期", str(query_date.date())],
+                ["交易員代號", trader_id],
+                [
+                    "交易員姓名",
+                    trader_info["交易員姓名"],
+                ],
+                ["超限項目", breach_items_text],
+                [
+                    "整體風控狀態",
+                    metrics["overall_risk_status"],
+                ],
+                [
+                    "AI規章處理建議",
+                    ai_rule_answer,
+                ],
+                [
+                    "參考規章來源",
+                    source_text,
+                ],
+                [
+                    "審核狀態",
+                    metrics["review_status"],
+                ],
+            ],
+            columns=["項目", "內容"],)
 
    
     # ========================================================
@@ -612,7 +519,7 @@ from reportlab.pdfbase.cidfonts import UnicodeCIDFont
 pdfmetrics.registerFont(UnicodeCIDFont("STSong-Light"))
 
 
-def generate_pdf_report(trader_id, query_date, save_archive=False):
+def generate_pdf_report(trader_id, query_date, save_archive=False, breach_rule_result=None):
     trader_id, query_date, trader_info, report_data = _get_query_data(trader_id, query_date)
     metrics = _calculate_metrics(trader_info, report_data)
 
@@ -625,49 +532,103 @@ def generate_pdf_report(trader_id, query_date, save_archive=False):
         pnl_overview[column] = pnl_overview[column].map(lambda value: f"{value:,.0f}")
 
     # ========================================================
-    # 判斷是否超限（跟Excel版本邏輯一致）
+    # 整理超限項目及AI規章建議
     # ========================================================
-    breach_notice = None
+
+    breach_items_text = None
+    ai_rule_answer = None
+    source_text = None
 
     if metrics["overall_breach"]:
+
         active_breaches = []
 
         if metrics["dv01_breach"]:
-            active_breaches.append({"name": "DV01超限", "usage": metrics["dv01_usage"]})
+            active_breaches.append(
+                {
+                    "name": "DV01超限",
+                    "usage": metrics["dv01_usage"],
+                }
+            )
 
         if metrics["monthly_stop_loss_breach"]:
-            active_breaches.append({"name": "月停損超限", "usage": metrics["monthly_stop_loss_usage"]})
+            active_breaches.append(
+                {
+                    "name": "月停損超限",
+                    "usage": metrics[
+                        "monthly_stop_loss_usage"
+                    ],
+                }
+            )
 
         if metrics["yearly_stop_loss_breach"]:
-            active_breaches.append({"name": "年停損超限", "usage": metrics["yearly_stop_loss_usage"]})
-
-        first_breach_type = (
-            "dv01_breach" if metrics["dv01_breach"]
-            else "monthly_stop_loss_breach" if metrics["monthly_stop_loss_breach"]
-            else "yearly_stop_loss_breach"
-        )
-        rule = get_breach_rule(first_breach_type)
+            active_breaches.append(
+                {
+                    "name": "年停損超限",
+                    "usage": metrics[
+                        "yearly_stop_loss_usage"
+                    ],
+                }
+            )
 
         breach_items_text = "\n".join(
-            f"{b['name']}：{b['usage']:.2%}" for b in active_breaches
+            (
+                f"{breach['name']}："
+                f"{breach['usage']:.2%}"
+            )
+            for breach in active_breaches
         )
 
-        if rule is not None:
-            breach_notice = {
-                "breach_items": breach_items_text,
-                "basis": rule["basis"],
-                "required_actions": rule["required_actions"],
-                "deadline": rule["deadline"],
-            }
-        else:
-            unset = {"source": "未設定", "section": "未設定", "text": "找不到相關資訊，請人工確認。"}
-            breach_notice = {
-                "breach_items": breach_items_text,
-                "basis": unset,
-                "required_actions": unset,
-                "deadline": unset,
-            }
+        # 沒有取得AI回答時的預設內容
+        ai_rule_answer = (
+            "目前無法取得AI規章處理建議，"
+            "請人工確認相關規章。"
+        )
 
+        source_text = "未提供"
+
+        # 使用app.py傳入的RAG + Gemini結果
+        if breach_rule_result is not None:
+
+            ai_rule_answer = breach_rule_result.get(
+                "answer",
+                ai_rule_answer,
+            )
+
+            sources = breach_rule_result.get(
+                "sources",
+                [],
+            )
+
+            if sources:
+                source_lines = []
+
+                for number, source in enumerate(
+                    sources,
+                    start=1,
+                ):
+                    source_title = source.get(
+                        "title",
+                        "未命名規章",
+                    )
+
+                    source_score = source.get(
+                        "score",
+                        0,
+                    )
+
+                    source_path = source.get(
+                        "path",
+                        "未提供來源路徑",
+                    )
+
+                    source_lines.append(
+                        f"{number}. {source_title}\n"
+                        f"相似度：{source_score:.3f}\n"
+                        f"來源檔案：{source_path}"
+                    )
+
+                source_text = "\n\n".join(source_lines)
 
 
     # ========================================================
@@ -761,33 +722,77 @@ def generate_pdf_report(trader_id, query_date, save_archive=False):
         elements.append(Paragraph(metrics["review_status"], normal_style))
 
         # 超限警告通知
-        if breach_notice is not None:
+        if metrics["overall_breach"]:
+
             elements.append(Spacer(1, 0.5 * cm))
-            elements.append(Paragraph("⚠ 超限警告通知", heading_style))
-            elements.append(Paragraph("【超限項目】", normal_style))
-            elements.append(Paragraph(breach_notice["breach_items"].replace("\n", "<br/>"), normal_style))
 
-            elements.append(Paragraph("【制度依據】", normal_style))
-            elements.append(Paragraph(
-                f"來源：{breach_notice['basis']['source']}　條次：{breach_notice['basis']['section']}",
-                normal_style,
-            ))
-            elements.append(Paragraph(breach_notice["basis"]["text"], normal_style))
+            elements.append(
+                Paragraph(
+                    "⚠ 超限警告通知",
+                    heading_style,
+                )
+            )
 
-            elements.append(Paragraph("【應辦事項】", normal_style))
-            elements.append(Paragraph(
-                f"來源：{breach_notice['required_actions']['source']}　"
-                f"條次：{breach_notice['required_actions']['section']}",
-                normal_style,
-            ))
-            elements.append(Paragraph(breach_notice["required_actions"]["text"], normal_style))
+            # 超限項目
+            elements.append(
+                Paragraph(
+                    "【超限項目】",
+                    normal_style,
+                )
+            )
 
-            elements.append(Paragraph("【處理期限】", normal_style))
-            elements.append(Paragraph(
-                f"來源：{breach_notice['deadline']['source']}　條次：{breach_notice['deadline']['section']}",
-                normal_style,
-            ))
-            elements.append(Paragraph(breach_notice["deadline"]["text"], normal_style))
+            safe_breach_items = escape(
+                breach_items_text or "未提供"
+            ).replace("\n", "<br/>")
+
+            elements.append(
+                Paragraph(
+                    safe_breach_items,
+                    normal_style,
+                )
+            )
+
+            elements.append(Spacer(1, 0.3 * cm))
+
+            # AI規章處理建議
+            elements.append(
+                Paragraph(
+                    "【AI規章處理建議】",
+                    normal_style,
+                )
+            )
+
+            safe_ai_rule_answer = escape(
+                ai_rule_answer or "未提供"
+            ).replace("\n", "<br/>")
+
+            elements.append(
+                Paragraph(
+                    safe_ai_rule_answer,
+                    normal_style,
+                )
+            )
+
+            elements.append(Spacer(1, 0.3 * cm))
+
+            # 參考規章來源
+            elements.append(
+                Paragraph(
+                    "【參考規章來源】",
+                    normal_style,
+                )
+            )
+
+            safe_source_text = escape(
+                source_text or "未提供"
+            ).replace("\n", "<br/>")
+
+            elements.append(
+                Paragraph(
+                    safe_source_text,
+                    normal_style,
+                )
+            )
 
         doc.build(elements)
 

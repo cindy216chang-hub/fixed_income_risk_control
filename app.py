@@ -1,7 +1,7 @@
 import streamlit as st
-
 import report
 from rag_llmwiki.answer import answer_rule_question
+
 
 
 # ============================================================
@@ -438,6 +438,7 @@ with report_tab:
                     trader_id=result["trader_id"],
                     query_date=result["query_date"],
                     save_archive=True,
+                    breach_rule_result=st.session_state.get("breach_rule_result"),
                 )
 
                 st.success(
@@ -462,6 +463,7 @@ with report_tab:
                         trader_id=result["trader_id"],
                         query_date=result["query_date"],
                         save_archive=True,
+                        breach_rule_result=st.session_state.get("breach_rule_result"),
                     )
                 )
 
