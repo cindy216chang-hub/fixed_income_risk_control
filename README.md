@@ -18,43 +18,37 @@ Terminal → New Terminal
 cd "C:\Users\xxxxx\xxxxxx\xxxxxx\fixed_income_risk_control"
 ```
 ### 建立虛擬環境：
-```powershell
-py -3.12 -m venv .venv
+```powershell (MAC)
+python3 -m venv .venv
 ```
 
-啟用虛擬環境：
+啟用虛擬環境：(MAC)
 ```powershell
-.venv\Scripts\Activate.ps1
+source .venv/bin/activate
 ```
 ## 第一次使用需要安裝的套件
 以下套件只需要安裝一次，不需要每天重新安裝。
 在VS Code終端機輸入：
 ```powershell
-py -m pip install -r requirements.txt
+pip install -r requirements.txt
 ```
 
 ### 設定 Gemini API Key
 在專案最外層建立 .env：
 GEMINI_API_KEY=你的_Gemini_API_Key
-請確認 .gitignore 包含：
+GEMINI_MODEL=gemini-3.1-flash-lite
 
+請確認 .gitignore 包含：
 .env
 .venv/
 __pycache__/
 *.pyc
 
 
-
-### 第一次建立規章知識庫
-
-只有在以下情況需要執行 build_knowledge.py：
-
+### 只有在以下情況需要執行 build_knowledge.py：
 第一次建立規章 Markdown 知識庫。
-
 新增或修改原始規章。
-
 想重新產生 knowledge/generated 中的 Markdown。
-
 請在專案最外層執行：
 
 py -m rag_llmwiki.build_knowledge
@@ -72,4 +66,3 @@ py -m streamlit run app.py
 
 每天正常使用時，不需要逐一執行其他Python檔案。
 
----
