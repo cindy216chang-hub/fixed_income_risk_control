@@ -1,5 +1,6 @@
 from datetime import datetime
 import report
+from rag_llmwiki.answer import (answer_rule_question, generate_breach_warning)
 
 def get_trader_id():
     """
@@ -100,78 +101,167 @@ def run_agent():
                 print("Agent 已結束。")
                 break
 
+            if not question:
+                print("請輸入問題。")
+                continue
+
             question_upper = question.upper()
+            rule_keywords = [
+                "規章",
+                "規定",
+                "依據",
+                "流程",
+                "程序",
+                "處理",
+                "通報",
+                "通知",
+                "期限",
+                "負責",
+                "應該怎麼",
+                "應該如何",
+                "需要做什麼",
+            ]
+
+            is_rule_question = any(
+                keyword in question
+                for keyword in rule_keywords
+            )
 
             
             try:
-                    # 查詢超限狀態
-                    if ("超限" in question
-                        or "預警" in question
-                        or "合規" in question
-                        or "風控狀態" in question):
-                        result = report.get_risk_status(
-                            trader_id=trader_id,
-                            query_date=query_date,)
+                # 1. 查詢規章、超限處理流程或通報規定
+                if is_rule_question:
+                    result = answer_rule_question(
+                        question=question,
+                        top_k=3,
+                    )
 
-                        print("\n【風控超限查詢結果】")
-                        print(f"交易員：{result['trader_name']} ({result['trader_id']})")
+                    print("\n【規章知識庫回答】")
+                    print(result["answer"])
 
-                        print(
-                            f"DV01 使用率：{result['dv01_usage']:.2%} "
-                            f"（{'超限' if result['dv01_breach'] else '正常'}）"
-                        )
+                    if result["sources"]:
+                        print("\n【檢索來源】")
 
-                        print(
-                            f"月停損使用率：{result['monthly_stop_loss_usage']:.2%} "
-                            f"（{'超限' if result['monthly_stop_loss_breach'] else '正常'}）"
-                        )
+                        for number, source in enumerate(
+                            result["sources"],
+                            start=1,
+                        ):
+                            print(
+                                f'{number}. {source["title"]} '
+                                f'（相似度：{source["score"]:.3f}）'
+                            )
+                            print(f'   檔案：{source["path"]}')
 
-                        print(
-                            f"年停損使用率：{result['yearly_stop_loss_usage']:.2%} "
-                            f"（{'超限' if result['yearly_stop_loss_breach'] else '正常'}）"
-                        )
+                # 2. 查詢交易員實際超限狀態
+                elif (
+                    "超限" in question
+                    or "預警" in question
+                    or "合規" in question
+                    or "風控狀態" in question
+                ):
+                    result = report.get_risk_status(
+                        trader_id=trader_id,
+                        query_date=query_date,
+                    )
 
-                        if result["overall_breach"]:
+                    print("\n【風控超限查詢結果】")
+                    print(
+                        f"交易員：{result['trader_name']} "
+                        f"({result['trader_id']})"
+                    )
+
+                    print(
+                        f"DV01 使用率：{result['dv01_usage']:.2%} "
+                        f"（{'超限' if result['dv01_breach'] else '正常'}）"
+                    )
+
+                    print(
+                        f"月停損使用率："
+                        f"{result['monthly_stop_loss_usage']:.2%} "
+                        f"（{'超限' if result['monthly_stop_loss_breach'] else '正常'}）"
+                    )
+
+                    print(
+                        f"年停損使用率："
+                        f"{result['yearly_stop_loss_usage']:.2%} "
+                        f"（{'超限' if result['yearly_stop_loss_breach'] else '正常'}）"
+                    )
+
+                    if result["overall_breach"]:
+                        try:
+                            warning_text = generate_breach_warning(result)
+
+                            print("\n【AI 風控警告】")
+                            print(warning_text)
+
+                        except Exception as api_error:
                             print("\n⚠ 風控狀態：超限預警")
                             print("至少一項使用率超過 100%。")
-                        else:
-                            print("\n風控狀態：正常")
-                            print("目前沒有任何指標超過 100%。")
-
-                    # 查詢 DV01
-                    elif "DV01" in question_upper:
-                        result = report.get_dv01(
-                            trader_id=trader_id,
-                            query_date=query_date,)
-
-                        print("\n【DV01 查詢結果】")
-                        print(f"Net DV01：{result['net_dv01']:,.0f} USD/bp")
-                        print(f"實際控管 DV01：{result['actual_control_dv01']:,.0f} USD/bp")
-                        print(f"DV01 授權額度：{result['dv01_limit']:,.0f} USD/bp")
-                        print(f"DV01 使用率：{result['dv01_usage']:.2%}")
-                        print(f"DV01 控管狀態：{result['dv01_control_status']}")
-
-                    # 查詢損益
-                    elif "總損益" in question or "損益" in question or "PNL" in question_upper:
-                        result = report.get_total_pnl(
-                            trader_id=trader_id,
-                            query_date=query_date,
-                        )
-
-                        print("\n【損益查詢結果】")
-                        print(f"交易員：{result['trader_name']} ({result['trader_id']})")
-                        print(f"當日損益：{result['total_daily_pnl']:,.0f} USD")
-                        print(f"本月累計損益：{result['total_mtd_pnl']:,.0f} USD")
-                        print(f"年累計損益：{result['total_ytd_pnl']:,.0f} USD")
+                            print(f"AI 警告暫時無法生成：{api_error}")
 
                     else:
-                        print(
-                            "目前支援：\n"
-                            "1. 損益\n"
-                            "2. DV01\n"
-                            "3. 超限\n"
-                            "4. 產生完整風控報告"
-                        )
+                        print("\n風控狀態：正常")
+                        print("目前沒有任何指標超過 100%。")
+
+                # 3. 查詢 DV01
+                elif "DV01" in question_upper:
+                    result = report.get_dv01(
+                        trader_id=trader_id,
+                        query_date=query_date,
+                    )
+
+                    print("\n【DV01 查詢結果】")
+                    print(f"Net DV01：{result['net_dv01']:,.0f} USD/bp")
+                    print(
+                        f"實際控管 DV01："
+                        f"{result['actual_control_dv01']:,.0f} USD/bp"
+                    )
+                    print(
+                        f"DV01 授權額度："
+                        f"{result['dv01_limit']:,.0f} USD/bp"
+                    )
+                    print(f"DV01 使用率：{result['dv01_usage']:.2%}")
+                    print(f"DV01 控管狀態：{result['dv01_control_status']}")
+
+                # 4. 查詢損益
+                elif (
+                    "總損益" in question
+                    or "損益" in question
+                    or "PNL" in question_upper
+                    or "P&L" in question_upper
+                ):
+                    result = report.get_total_pnl(
+                        trader_id=trader_id,
+                        query_date=query_date,
+                    )
+
+                    print("\n【損益查詢結果】")
+                    print(
+                        f"交易員：{result['trader_name']} "
+                        f"({result['trader_id']})"
+                    )
+                    print(
+                        f"當日損益："
+                        f"{result['total_daily_pnl']:,.0f} USD"
+                    )
+                    print(
+                        f"本月累計損益："
+                        f"{result['total_mtd_pnl']:,.0f} USD"
+                    )
+                    print(
+                        f"年累計損益："
+                        f"{result['total_ytd_pnl']:,.0f} USD"
+                    )
+
+                else:
+                    print(
+                        "目前支援：\n"
+                        "1. 損益查詢\n"
+                        "2. DV01 查詢\n"
+                        "3. 超限狀態查詢\n"
+                        "4. 規章與處理流程查詢"
+                    )
+
 
             except FileNotFoundError as error:
                 print(f"找不到資料檔案：{error}")
@@ -186,5 +276,5 @@ def run_agent():
                 print(f"執行查詢時發生錯誤：{error}")
 
 
-if __name__ == "__main__":
-        run_agent()
+    if __name__ == "__main__":
+            run_agent()

@@ -1,6 +1,7 @@
 import streamlit as st
+
 import report
-from rag.rule_mapping import get_breach_rule #匯入超限規章對照表
+from rag_llmwiki.answer import answer_rule_question
 
 
 # ============================================================
@@ -20,363 +21,592 @@ st.set_page_config(
 
 st.title("固定收益盤後風控系統")
 
-st.write(
-    "輸入交易員代號與查詢日期，"
-    "系統將計算損益、DV01及超限狀態。"
+
+# ============================================================
+# 建立頁籤
+# ============================================================
+
+report_tab, rule_tab = st.tabs(
+    [
+        "📊 風控報告查詢",
+        "📚 超限規章問答",
+    ]
 )
 
 
 # ============================================================
-# 初始化網頁查詢結果
+# 初始化 Session State
 # ============================================================
 
-# session_state可以在網頁重新執行時保留查詢結果
+# 保存風控查詢結果
 if "report_result" not in st.session_state:
     st.session_state.report_result = None
 
+# 保存自動產生的超限規章建議
+if "breach_rule_result" not in st.session_state:
+    st.session_state.breach_rule_result = None
 
-# ============================================================
-# 查詢表單
-# ============================================================
+# 保存自動規章查詢的錯誤訊息
+if "breach_rule_error" not in st.session_state:
+    st.session_state.breach_rule_error = None
 
-with st.form("risk_query_form"):
-
-    # 輸入交易員代號
-    trader_id = st.text_input(
-        "交易員代號",
-        placeholder="例如：TRD001",
-    )
-
-    # 選擇查詢日期
-    query_date = st.date_input(
-        "查詢日期",
-    )
-
-    # 送出查詢
-    submitted = st.form_submit_button(
-        "查詢風控資料",
-        type="primary",
-    )
+# 保存使用者主動詢問的規章結果
+if "manual_rule_result" not in st.session_state:
+    st.session_state.manual_rule_result = None
 
 
 # ============================================================
-# 執行查詢
+# 頁籤一：風控報告查詢
 # ============================================================
 
-if submitted:
-
-    # 整理交易員代號
-    trader_id = trader_id.strip().upper()
-
-    # 沒有輸入交易員代號
-    if not trader_id:
-        st.warning("請輸入交易員代號。")
-
-    else:
-        try:
-            # 查詢損益
-            pnl_result = report.get_total_pnl(
-                trader_id=trader_id,
-                query_date=query_date,
-            )
-
-            # 查詢DV01
-            dv01_result = report.get_dv01(
-                trader_id=trader_id,
-                query_date=query_date,
-            )
-
-            # 查詢整體風控狀態
-            risk_result = report.get_risk_status(
-                trader_id=trader_id,
-                query_date=query_date,
-            )
-
-            # 將查詢結果保存到session_state
-            # 這裡只查詢，不會輸出Excel
-            st.session_state.report_result = {
-                "trader_id": trader_id,
-                "query_date": query_date,
-                "pnl": pnl_result,
-                "dv01": dv01_result,
-                "risk": risk_result,
-            }
-
-        except FileNotFoundError as error:
-            st.error(f"找不到資料檔案：{error}")
-
-        except ValueError as error:
-            st.error(f"查詢失敗：{error}")
-
-        except KeyError as error:
-            st.error(f"Excel缺少必要欄位：{error}")
-
-        except Exception as error:
-            st.error(f"執行查詢時發生錯誤：{error}")
-
-
-# ============================================================
-# 顯示查詢結果
-# ============================================================
-
-result = st.session_state.report_result
-
-if result is not None:
-
-    pnl = result["pnl"]
-    dv01 = result["dv01"]
-    risk = result["risk"]
-
-    st.divider()
-
-    st.subheader(
-        f"{pnl['trader_name']} "
-        f"({pnl['trader_id']})"
-    )
+with report_tab:
 
     st.write(
-        f"查詢日期：{result['query_date']}"
+        "輸入交易員代號與查詢日期，"
+        "系統將計算損益、DV01及超限狀態。"
     )
 
     # ========================================================
-    # 整體風控狀態
+    # 查詢表單
     # ========================================================
 
-    if risk["overall_breach"]:
-        st.error(
-            "⚠ 整體風控狀態：不合規"
+    with st.form("risk_query_form"):
+
+        trader_id = st.text_input(
+            "交易員代號",
+            placeholder="例如：TRD001",
         )
 
-    else:
-        st.success(
-            "✓ 整體風控狀態：合規"
+        query_date = st.date_input(
+            "查詢日期",
+        )
+
+        submitted = st.form_submit_button(
+            "查詢風控資料",
+            type="primary",
         )
 
     # ========================================================
-    # 損益資訊
+    # 執行風控查詢
     # ========================================================
 
-    st.subheader("損益概況")
+    if submitted:
 
-    pnl_column_1, pnl_column_2, pnl_column_3 = (
-        st.columns(3)
-    )
+        trader_id = trader_id.strip().upper()
 
-    pnl_column_1.metric(
-        "當日損益",
-        f"{pnl['total_daily_pnl']:,.0f} USD",
-    )
+        # 每次重新查詢時，清除上一次結果
+        st.session_state.report_result = None
+        st.session_state.breach_rule_result = None
+        st.session_state.breach_rule_error = None
 
-    pnl_column_2.metric(
-        "本月累計損益",
-        f"{pnl['total_mtd_pnl']:,.0f} USD",
-    )
+        if not trader_id:
+            st.warning("請輸入交易員代號。")
 
-    pnl_column_3.metric(
-        "年累計損益",
-        f"{pnl['total_ytd_pnl']:,.0f} USD",
-    )
+        else:
+            try:
+                # 查詢損益
+                pnl_result = report.get_total_pnl(
+                    trader_id=trader_id,
+                    query_date=query_date,
+                )
+
+                # 查詢 DV01
+                dv01_result = report.get_dv01(
+                    trader_id=trader_id,
+                    query_date=query_date,
+                )
+
+                # 查詢整體風控狀態
+                risk_result = report.get_risk_status(
+                    trader_id=trader_id,
+                    query_date=query_date,
+                )
+
+                # 保存查詢結果
+                st.session_state.report_result = {
+                    "trader_id": trader_id,
+                    "query_date": query_date,
+                    "pnl": pnl_result,
+                    "dv01": dv01_result,
+                    "risk": risk_result,
+                }
+
+                # =================================================
+                # 如果發生超限，自動建立規章問題
+                # =================================================
+
+                if risk_result["overall_breach"]:
+
+                    breach_names = []
+
+                    if risk_result["dv01_breach"]:
+                        breach_names.append("DV01超限")
+
+                    if risk_result["monthly_stop_loss_breach"]:
+                        breach_names.append("月停損超限")
+
+                    if risk_result["yearly_stop_loss_breach"]:
+                        breach_names.append("年停損超限")
+
+                    rule_question = (
+                        "交易員發生以下風控超限："
+                        f"{'、'.join(breach_names)}。"
+                        "請嚴格根據檢索到的規章內容，"
+                        "說明制度依據、應辦事項、"
+                        "通報對象與處理期限。"
+                        "如果規章沒有提到某項資訊，"
+                        "請明確回答規章未說明，不要自行推測。"
+                    )
+
+                    try:
+                        with st.spinner(
+                            "偵測到超限，正在檢索相關規章..."
+                        ):
+                            rule_result = answer_rule_question(
+                                question=rule_question,
+                                top_k=3,
+                            )
+
+                        st.session_state.breach_rule_result = (
+                            rule_result
+                        )
+
+                    except Exception as api_error:
+                        st.session_state.breach_rule_error = str(
+                            api_error
+                        )
+
+            except FileNotFoundError as error:
+                st.error(f"找不到資料檔案：{error}")
+
+            except ValueError as error:
+                st.error(f"查詢失敗：{error}")
+
+            except KeyError as error:
+                st.error(f"Excel缺少必要欄位：{error}")
+
+            except Exception as error:
+                st.error(f"執行查詢時發生錯誤：{error}")
 
     # ========================================================
-    # 風控使用率
+    # 顯示查詢結果
     # ========================================================
 
-    st.subheader("風控指標")
+    result = st.session_state.report_result
 
-    risk_column_1, risk_column_2, risk_column_3 = (
-        st.columns(3)
-    )
+    if result is not None:
 
-    risk_column_1.metric(
-        "DV01使用率",
-        f"{risk['dv01_usage']:.2%}",
-    )
-
-    risk_column_2.metric(
-        "月停損使用率",
-        f"{risk['monthly_stop_loss_usage']:.2%}",
-    )
-
-    risk_column_3.metric(
-        "年停損使用率",
-        f"{risk['yearly_stop_loss_usage']:.2%}",
-    )
-
-    # ========================================================
-    # 超限警告通知
-    # ========================================================
-
-    if risk["overall_breach"]:
+        pnl = result["pnl"]
+        dv01 = result["dv01"]
+        risk = result["risk"]
 
         st.divider()
-        st.header("⚠ 超限警告通知")
 
-        # 儲存所有超限項目
-        active_breaches = []
-
-        # DV01超限
-        if risk["dv01_breach"]:
-            active_breaches.append(
-                {
-                    "type": "dv01_breach",
-                    "name": "DV01超限",
-                    "usage": risk["dv01_usage"],
-                }
-            )
-
-        # 月停損超限
-        if risk["monthly_stop_loss_breach"]:
-            active_breaches.append(
-                {
-                    "type": (
-                        "monthly_stop_loss_breach"
-                    ),
-                    "name": "月停損超限",
-                    "usage": risk[
-                        "monthly_stop_loss_usage"
-                    ],
-                }
-            )
-
-        # 年停損超限
-        if risk["yearly_stop_loss_breach"]:
-            active_breaches.append(
-                {
-                    "type": (
-                        "yearly_stop_loss_breach"
-                    ),
-                    "name": "年停損超限",
-                    "usage": risk[
-                        "yearly_stop_loss_usage"
-                    ],
-                }
-            )
-
-        # 顯示所有超限項目
-        st.subheader("超限項目")
-
-        for breach in active_breaches:
-            st.write(
-                f"- {breach['name']}："
-                f"{breach['usage']:.2%}"
-            )
-
-        # 取得規章對照內容
-        first_breach_type = (
-            active_breaches[0]["type"]
+        st.subheader(
+            f"{pnl['trader_name']} "
+            f"({pnl['trader_id']})"
         )
 
-        rule = get_breach_rule(
-            first_breach_type
+        st.write(
+            f"查詢日期：{result['query_date']}"
         )
 
-        # 顯示規章內容
-        if rule is not None:
+        # ====================================================
+        # 整體風控狀態
+        # ====================================================
 
-            st.subheader("制度依據")
+        if risk["overall_breach"]:
+            st.error("⚠ 整體風控狀態：不合規")
 
-            st.caption(
-                f"來源：{rule['basis']['source']}｜"
-                f"條次：{rule['basis']['section']}"
+        else:
+            st.success("✓ 整體風控狀態：合規")
+
+        # ====================================================
+        # 損益資訊
+        # ====================================================
+
+        st.subheader("損益概況")
+
+        pnl_column_1, pnl_column_2, pnl_column_3 = (
+            st.columns(3)
+        )
+
+        pnl_column_1.metric(
+            "當日損益",
+            f"{pnl['total_daily_pnl']:,.0f} USD",
+        )
+
+        pnl_column_2.metric(
+            "本月累計損益",
+            f"{pnl['total_mtd_pnl']:,.0f} USD",
+        )
+
+        pnl_column_3.metric(
+            "年累計損益",
+            f"{pnl['total_ytd_pnl']:,.0f} USD",
+        )
+
+        # ====================================================
+        # DV01 資訊
+        # ====================================================
+
+        st.subheader("DV01概況")
+
+        dv01_column_1, dv01_column_2, dv01_column_3 = (
+            st.columns(3)
+        )
+
+        dv01_column_1.metric(
+            "Net DV01",
+            f"{dv01['net_dv01']:,.0f} USD/bp",
+        )
+
+        dv01_column_2.metric(
+            "實際控管DV01",
+            f"{dv01['actual_control_dv01']:,.0f} USD/bp",
+        )
+
+        dv01_column_3.metric(
+            "DV01授權額度",
+            f"{dv01['dv01_limit']:,.0f} USD/bp",
+        )
+
+        # ====================================================
+        # 風控使用率
+        # ====================================================
+
+        st.subheader("風控指標")
+
+        risk_column_1, risk_column_2, risk_column_3 = (
+            st.columns(3)
+        )
+
+        risk_column_1.metric(
+            "DV01使用率",
+            f"{risk['dv01_usage']:.2%}",
+        )
+
+        risk_column_2.metric(
+            "月停損使用率",
+            f"{risk['monthly_stop_loss_usage']:.2%}",
+        )
+
+        risk_column_3.metric(
+            "年停損使用率",
+            f"{risk['yearly_stop_loss_usage']:.2%}",
+        )
+
+        # ====================================================
+        # 超限警告及規章建議
+        # ====================================================
+
+        if risk["overall_breach"]:
+
+            st.divider()
+            st.header("⚠ 超限警告通知")
+
+            active_breaches = []
+
+            if risk["dv01_breach"]:
+                active_breaches.append(
+                    {
+                        "name": "DV01超限",
+                        "usage": risk["dv01_usage"],
+                    }
+                )
+
+            if risk["monthly_stop_loss_breach"]:
+                active_breaches.append(
+                    {
+                        "name": "月停損超限",
+                        "usage": risk[
+                            "monthly_stop_loss_usage"
+                        ],
+                    }
+                )
+
+            if risk["yearly_stop_loss_breach"]:
+                active_breaches.append(
+                    {
+                        "name": "年停損超限",
+                        "usage": risk[
+                            "yearly_stop_loss_usage"
+                        ],
+                    }
+                )
+
+            # 顯示超限項目
+            st.subheader("超限項目")
+
+            for breach in active_breaches:
+                st.error(
+                    f"{breach['name']}："
+                    f"{breach['usage']:.2%}"
+                )
+
+            # 顯示 RAG + Gemini 產生的規章建議
+            breach_rule_result = (
+                st.session_state.breach_rule_result
             )
 
-            st.write(
-                rule["basis"]["text"]
+            breach_rule_error = (
+                st.session_state.breach_rule_error
             )
 
-            st.subheader("應辦事項")
+            if breach_rule_result is not None:
 
-            st.caption(
-                f"來源："
-                f"{rule['required_actions']['source']}｜"
-                f"條次："
-                f"{rule['required_actions']['section']}"
-            )
+                st.subheader("AI規章處理建議")
 
-            st.write(
-                rule["required_actions"]["text"]
-            )
+                st.warning(
+                    breach_rule_result["answer"]
+                )
 
-            st.subheader("處理期限")
+                sources = breach_rule_result.get(
+                    "sources",
+                    [],
+                )
 
-            st.caption(
-                f"來源：{rule['deadline']['source']}｜"
-                f"條次：{rule['deadline']['section']}"
-            )
+                if sources:
 
-            st.write(
-                rule["deadline"]["text"]
-            )
+                    with st.expander("查看規章來源"):
+
+                        for number, source in enumerate(
+                            sources,
+                            start=1,
+                        ):
+                            source_title = source.get(
+                                "title",
+                                "未命名規章",
+                            )
+
+                            source_score = source.get(
+                                "score",
+                                0,
+                            )
+
+                            source_path = source.get(
+                                "path",
+                                "未提供來源路徑",
+                            )
+
+                            st.markdown(
+                                f"**{number}. "
+                                f"{source_title}**"
+                            )
+
+                            st.write(
+                                f"相似度："
+                                f"{source_score:.3f}"
+                            )
+
+                            st.caption(
+                                f"來源檔案：{source_path}"
+                            )
+
+            elif breach_rule_error is not None:
+
+                st.warning(
+                    "目前已偵測到風控超限，"
+                    "但暫時無法取得規章處理建議，"
+                    "請人工確認相關規章。"
+                )
+
+                st.caption(
+                    f"錯誤資訊：{breach_rule_error}"
+                )
+
+        # ====================================================
+        # Excel、PDF輸出及清除按鈕
+        # ====================================================
+
+        st.divider()
+
+        (
+            button_column_1,
+            button_column_2,
+            button_column_3,
+        ) = st.columns(3)
+
+        # 輸出 Excel
+        if button_column_1.button(
+            "輸出Excel報告",
+            type="primary",
+            use_container_width=True,
+        ):
+            try:
+                archive_location = report.generate_report(
+                    trader_id=result["trader_id"],
+                    query_date=result["query_date"],
+                    save_archive=True,
+                )
+
+                st.success(
+                    "Excel報告已輸出："
+                    f"{archive_location}"
+                )
+
+            except Exception as error:
+                st.error(
+                    f"輸出Excel時發生錯誤：{error}"
+                )
+
+        # 輸出 PDF
+        if button_column_2.button(
+            "輸出PDF報告",
+            type="primary",
+            use_container_width=True,
+        ):
+            try:
+                pdf_location = (
+                    report.generate_pdf_report(
+                        trader_id=result["trader_id"],
+                        query_date=result["query_date"],
+                        save_archive=True,
+                    )
+                )
+
+                st.success(
+                    f"PDF報告已輸出：{pdf_location}"
+                )
+
+            except Exception as error:
+                st.error(
+                    f"輸出PDF時發生錯誤：{error}"
+                )
+
+        # 清除查詢結果
+        if button_column_3.button(
+            "清除查詢結果",
+            use_container_width=True,
+        ):
+            st.session_state.report_result = None
+            st.session_state.breach_rule_result = None
+            st.session_state.breach_rule_error = None
+
+            st.rerun()
+
+
+# ============================================================
+# 頁籤二：超限規章問答
+# ============================================================
+
+with rule_tab:
+
+    st.subheader("超限規章問答")
+
+    st.write(
+        "可詢問DV01、停損、超限處理、"
+        "通報流程及處理期限等規章問題。"
+    )
+
+    with st.form("rule_question_form"):
+
+        rule_question = st.text_area(
+            "規章問題",
+            placeholder=(
+                "例如：DV01超限後應該如何處理？"
+            ),
+            height=120,
+        )
+
+        ask_rule_button = st.form_submit_button(
+            "查詢規章",
+            type="primary",
+        )
+
+    # ========================================================
+    # 執行規章問答
+    # ========================================================
+
+    if ask_rule_button:
+
+        rule_question = rule_question.strip()
+
+        if not rule_question:
+            st.warning("請輸入規章問題。")
+
+        else:
+            try:
+                with st.spinner(
+                    "正在檢索規章並產生回答..."
+                ):
+                    manual_rule_result = (
+                        answer_rule_question(
+                            question=rule_question,
+                            top_k=3,
+                        )
+                    )
+
+                st.session_state.manual_rule_result = (
+                    manual_rule_result
+                )
+
+            except Exception as error:
+                st.session_state.manual_rule_result = None
+
+                st.error(
+                    f"規章查詢時發生錯誤：{error}"
+                )
+
+    # ========================================================
+    # 顯示規章問答結果
+    # ========================================================
+
+    manual_rule_result = (
+        st.session_state.manual_rule_result
+    )
+
+    if manual_rule_result is not None:
+
+        st.divider()
+        st.subheader("AI規章回答")
+
+        st.write(
+            manual_rule_result["answer"]
+        )
+
+        manual_sources = manual_rule_result.get(
+            "sources",
+            [],
+        )
+
+        if manual_sources:
+
+            st.subheader("參考來源")
+
+            for number, source in enumerate(
+                manual_sources,
+                start=1,
+            ):
+                source_title = source.get(
+                    "title",
+                    "未命名規章",
+                )
+
+                source_score = source.get(
+                    "score",
+                    0,
+                )
+
+                source_path = source.get(
+                    "path",
+                    "未提供來源路徑",
+                )
+
+                with st.expander(
+                    f"{number}. {source_title}"
+                ):
+                    st.write(
+                        f"相似度："
+                        f"{source_score:.3f}"
+                    )
+
+                    st.caption(
+                        f"來源檔案：{source_path}"
+                    )
 
         else:
             st.warning(
-                "找不到對應規章，請人工確認。"
+                "沒有找到足夠相關的規章來源，"
+                "請人工確認。"
             )
-
-    # ========================================================
-    # Excel ＆ pdf輸出及重新查詢按鈕
-    # ========================================================
-
-    st.divider()
-
-    button_column_1, button_column_2 ,button_column_3= st.columns(3)
-
-    # 只有按這個按鈕，才會呼叫generate_report()
-    if button_column_1.button(
-        "輸出Excel報告",
-        type="primary",
-        use_container_width=True,
-    ):
-        try:
-            archive_location = report.generate_report(
-                trader_id=result["trader_id"],
-                query_date=result["query_date"],
-                save_archive=True
-            )
-
-            st.success(
-                f"Excel報告已輸出："
-                f"{archive_location}"
-            )
-
-        except Exception as error:
-            st.error(
-                f"輸出Excel時發生錯誤：{error}"
-            )
-
-  
-
-
-    #輸出pdf
-    if button_column_2.button(
-    "輸出PDF報告",
-    type="primary",
-    use_container_width=True,
-    ):
-        try:
-            pdf_location = report.generate_pdf_report(
-                trader_id=result["trader_id"],
-                query_date=result["query_date"],
-                save_archive=True
-            )
-
-            st.success(
-                f"PDF報告已輸出："
-                f"{pdf_location}"
-            )
-
-        except Exception as error:
-            st.error(
-                f"輸出PDF時發生錯誤：{error}"
-            )
-
-
-
-
-    # 清除目前顯示的查詢結果
-    if button_column_3.button(
-        "清除查詢結果",
-        use_container_width=True,
-    ):
-        st.session_state.report_result = None
-        st.rerun()
