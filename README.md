@@ -1,20 +1,11 @@
-## Fixed Income AI Risk Control System
+## 固定收益盤後 AI 風控系統
+Fixed Income AI Risk Control System
 
-An AI-assisted risk control platform for fixed income trading.
+本專案整合兩項功能：
 
-Features:
-• Daily P&L calculation
-• Net DV01 monitoring
-• Risk limit monitoring
-• Rule-based risk engine
-• RAG-based policy retrieval
-• Streamlit dashboard
-• Automated risk report generation
+盤後風控報告：查詢交易員損益、DV01、停損使用率與超限狀態，並輸出 Excel／PDF 報告。
 
-
-
-
-目前系統使用免費的TF-IDF搜尋，不使用OpenAI API，也不需要PyTorch。
+規章 RAG 問答：檢索 Markdown 規章知識庫，再由 Gemini 根據檢索內容回答問題；發生超限時，也會自動產生規章處理建議。
 
 ## 每天開啟VS Code後的操作
 
