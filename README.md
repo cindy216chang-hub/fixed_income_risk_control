@@ -11,19 +11,8 @@ Features:
 • Streamlit dashboard
 • Automated risk report generation
 
-## 第一次使用需要安裝的套件
 
-以下套件只需要安裝一次，不需要每天重新安裝。
-在VS Code終端機輸入：
-```powershell
-pip install pandas openpyxl pypdf scikit-learn streamlit PyMuPDF reportlab
-```
-各套件用途：
-| 套件 | 用途 |
-| pandas | 讀取、處理及輸出Excel資料 |
-| openpyxl | 讓pandas讀寫`.xlsx`檔案 |
-| pypdf | 讀取PDF中的規章文字 |
-| scikit-learn | 使用TF-IDF及餘弦相似度搜尋規章 |
+
 
 目前系統使用免費的TF-IDF搜尋，不使用OpenAI API，也不需要PyTorch。
 
@@ -35,17 +24,61 @@ Terminal → New Terminal
 ```
 ### 切換到專案資料夾
 ```powershell
-cd "C:\Users\Sinopac\Desktop\GitHub\fixed_income_risk_control\風控"
+cd "C:\Users\xxxxx\xxxxxx\xxxxxx\fixed_income_risk_control"
 ```
-### 啟動固定收益風控Agent
+### 建立虛擬環境：
 ```powershell
-py/python agent.py
-```
-### 開啟streamlit
-```powershell
-py/python -m streamlit run app.py
+py -3.12 -m venv .venv
 ```
 
-每天正常使用時，只需要執行這2個指令，不需要逐一執行其他Python檔案。
+啟用虛擬環境：
+```powershell
+.venv\Scripts\Activate.ps1
+```
+## 第一次使用需要安裝的套件
+以下套件只需要安裝一次，不需要每天重新安裝。
+在VS Code終端機輸入：
+```powershell
+py -m pip install -r requirements.txt
+```
+
+### 設定 Gemini API Key
+在專案最外層建立 .env：
+GEMINI_API_KEY=你的_Gemini_API_Key
+請確認 .gitignore 包含：
+
+.env
+.venv/
+__pycache__/
+*.pyc
+
+
+
+### 第一次建立規章知識庫
+
+只有在以下情況需要執行 build_knowledge.py：
+
+第一次建立規章 Markdown 知識庫。
+
+新增或修改原始規章。
+
+想重新產生 knowledge/generated 中的 Markdown。
+
+請在專案最外層執行：
+
+py -m rag_llmwiki.build_knowledge
+
+執行後，確認產生的 Markdown 位於：
+
+rag_llmwiki/knowledge/generated/
+
+如果 Markdown 已經建立完成，而且規章沒有更新，就不需要每天重新執行這一步。
+
+### 開啟streamlit
+```powershell
+py -m streamlit run app.py
+```
+
+每天正常使用時，不需要逐一執行其他Python檔案。
 
 ---
